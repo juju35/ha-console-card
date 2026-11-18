@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 - 2026-11-18
+
+### Features
+- **Play time today**: a *Played today* tile, counted from Home Assistant's history since midnight for PlayStation (PSN and PS5-MQTT, counted once) and Xbox, or read from a sensor with the new `play_time` option (a `history_stats` sensor, in its unit); `show_play_time: false` hides it ([#4](https://github.com/juju35/ha-console-card/issues/4)).
+
 ## 1.0.0 - 2026-11-18
 
 ### Features

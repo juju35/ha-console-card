@@ -62,6 +62,8 @@ export const home = ({ ps = "playing", xbox = "playing", left = 40, used = 80, m
   gamer("friends", "37");
   gamer("status", xPlaying ? "Playing Ember Crown" : "Online");
   add("binary_sensor.gamer_game_pass", "gamer", "xbox", "has_game_pass", "on");
+  // A history_stats sensor of today's play time (hours), for the `play_time` option.
+  states["sensor.xbox_play_time_today"] = st("sensor.xbox_play_time_today", "2.75", { unit_of_measurement: "h", friendly_name: "Xbox play time today" });
   // A friend's account: the console's own account is the one playing what it shows.
   gamer("gamer_score", "9120", {}, "friend");
   gamer("now_playing", "Another game", {}, "friend");
@@ -74,7 +76,19 @@ export const home = ({ ps = "playing", xbox = "playing", left = 40, used = 80, m
   sw("select", "restriction_mode", "timer_mode", "Daily");
   sw("time", "bedtime_alarm", "bedtime_alarm", "21:00:00");
   sw("time", "bedtime_end_time", "bedtime_end_time", "07:00:00");
+  // Today's history, as history/history_during_period answers it (times in s), for the cards' play time today: the
+  // PlayStation played 20 min a while ago, then the session playing now (on its media player and its PS5-MQTT activity,
+  // counted once); the Xbox 50 min earlier on.
+  const t = (min) => (Date.now() - min * 60000) / 1000;
+  const run = (on, ...spans) => spans.flatMap(([a, b]) => [{ s: on, lu: t(a) }, ...(b == null ? [] : [{ s: "off", lu: t(b) }])]);
+  const now = ps === "playing" ? [[72]] : [];
+  const history = {
+    "media_player.playstation_5": [{ s: "off", lu: t(1440) }, ...run("playing", [100, 80], ...now)],
+    "sensor.ps5_activity": [{ s: "none", lu: t(1440) }, ...run("playing", [100, 80], ...now)],
+    "media_player.xbox_series_x": [{ s: "off", lu: t(1440) }, ...run("playing", [240, 190])],
+  };
   return {
+    __history: history,
     language: "en",
     locale: { language: "en" },
     themes: { darkMode: false },
@@ -93,11 +107,11 @@ export const home = ({ ps = "playing", xbox = "playing", left = 40, used = 80, m
   };
 };
 
-// The screenshots' scenes: the console's entity and the home's state.
+// The screenshots' scenes: the console's entity, the home's state and the card's options.
 const SCENES = {
   "ps-playing": ["media_player.playstation_5", { ps: "playing" }],
   "ps-standby": ["media_player.playstation_5", { ps: "off" }],
-  "xbox-playing": ["media_player.xbox_series_x", { xbox: "playing" }],
+  "xbox-playing": ["media_player.xbox_series_x", { xbox: "playing" }, { play_time: "sensor.xbox_play_time_today" }],
   "xbox-online": ["media_player.xbox_series_x", { xbox: "on" }],
   "switch-online": ["sensor.kids_switch_used_screen_time", {}],
   "switch-time-up": ["sensor.kids_switch_used_screen_time", { left: 0, used: 120 }],
@@ -107,7 +121,7 @@ const SCENES = {
 };
 
 export const setup = (s) => {
-  const [entity, opts] = SCENES[s.scene];
+  const [entity, opts, config] = SCENES[s.scene];
   const hass = { ...home(opts), themes: { darkMode: s.theme === "dark" } };
-  return { hass, config: { entity, ...s.config }, open: s.open };
+  return { hass, config: { entity, ...config, ...s.config }, open: s.open };
 };
