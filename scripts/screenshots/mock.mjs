@@ -76,7 +76,19 @@ export const home = ({ ps = "playing", xbox = "playing", left = 40, used = 80, m
   sw("select", "restriction_mode", "timer_mode", "Daily");
   sw("time", "bedtime_alarm", "bedtime_alarm", "21:00:00");
   sw("time", "bedtime_end_time", "bedtime_end_time", "07:00:00");
+  // Today's history, as history/history_during_period answers it (times in s), for the cards' play time today: the
+  // PlayStation played 20 min a while ago, then the session playing now (on its media player and its PS5-MQTT activity,
+  // counted once); the Xbox 50 min earlier on.
+  const t = (min) => (Date.now() - min * 60000) / 1000;
+  const run = (on, ...spans) => spans.flatMap(([a, b]) => [{ s: on, lu: t(a) }, ...(b == null ? [] : [{ s: "off", lu: t(b) }])]);
+  const now = ps === "playing" ? [[72]] : [];
+  const history = {
+    "media_player.playstation_5": [{ s: "off", lu: t(1440) }, ...run("playing", [100, 80], ...now)],
+    "sensor.ps5_activity": [{ s: "none", lu: t(1440) }, ...run("playing", [100, 80], ...now)],
+    "media_player.xbox_series_x": [{ s: "off", lu: t(1440) }, ...run("playing", [240, 190])],
+  };
   return {
+    __history: history,
     language: "en",
     locale: { language: "en" },
     themes: { darkMode: false },

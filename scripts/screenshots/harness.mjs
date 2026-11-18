@@ -117,7 +117,7 @@ export const mountCard = (page, { tag, hass, config, dark = false, open = null }
         language: hass.language,
         themes: { darkMode: dark },
         callService: async () => {},
-        ...(window.__ws ? { callWS: window.__ws } : {}),
+        ...(window.__ws ? { callWS: window.__ws } : hass.__history ? { callWS: async () => hass.__history } : {}),
       };
       document.getElementById("root").appendChild(el);
       // A mouse click (detail 1), not a keyboard one: no focus ring left in the shot.

@@ -147,6 +147,8 @@ entities:
 | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps-playing.png" alt="PlayStation, playing" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps-standby.png" alt="PlayStation, standby" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps5-mqtt.png" alt="PS5-MQTT alone" width="400"> |
 | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps-playing-dark.png" alt="PlayStation, playing, dark" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps-standby-dark.png" alt="PlayStation, standby, dark" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-ps5-mqtt-dark.png" alt="PS5-MQTT alone, dark" width="400"> |
 
+The *Played today* tile: counted from the history on the PlayStation and on the Xbox's home screen, read from a `play_time` sensor on the Xbox playing.
+
 | Xbox, playing | Xbox, home screen | Classic header (`illustration: false`) |
 |---|---|---|
 | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-xbox-playing.png" alt="Xbox, playing" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-xbox-online.png" alt="Xbox, home screen" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-classic.png" alt="Classic header" width="400"> |
