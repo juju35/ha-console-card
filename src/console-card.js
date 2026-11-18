@@ -151,13 +151,16 @@ const CC_SVG = {
   play: '<path d="M7 5v14l11-7z"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
   bonus: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M10 2h4"/>',
+  hourglass: '<path d="M6 3h12M6 21h12"/><path d="M7 3c0 4 5 6 5 9s-5 5-5 9M17 3c0 4-5 6-5 9s5 5 5 9"/>',
 };
+// How long the history-counted play time is kept before it is asked again (ms): sooner when the state changes.
+const CC_PLAYED_TTL = 300000;
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 class ConsoleCard extends RcCard {
   static tag = "console-card";
   static i18n = CC_I18N;
-  static defaults = { illustration: true, illustration_theme: "auto", animations: true, show_trophies: true, show_controls: true, bonus_minutes: 15 };
+  static defaults = { illustration: true, illustration_theme: "auto", animations: true, show_trophies: true, show_controls: true, show_play_time: true, bonus_minutes: 15 };
 
   // The console most likely to be looked at: the one playing, else the first one of the home.
   static getStubConfig(hass) {
@@ -272,6 +275,7 @@ class ConsoleCard extends RcCard {
     const np = st("now_playing");
     const npa = ok(np) ? np.attributes : {};
     const powerId = ok(power) && /^(switch|remote|input_boolean)\./.test(power.entity_id) ? power.entity_id : null;
+    const playTime = c.show_play_time === false ? null : c.play_time ? ccMinutes(h.states[c.play_time]) : platform === "switch" ? null : this._playedToday(e, platform, state);
     const total = num(st("total_storage"));
     const free = num(st("free_storage"));
     return {
@@ -289,6 +293,7 @@ class ConsoleCard extends RcCard {
       cover,
       since,
       lastAt: lastAt && !Number.isNaN(lastAt.getTime()) ? lastAt : null,
+      playTime,
       // PlayStation Network
       level: num(st("trophy_level")),
       levelProgress: num(st("level_progress")),
@@ -319,6 +324,48 @@ class ConsoleCard extends RcCard {
       mediaId: ok(media) ? media.entity_id : null,
       device: e.device,
     };
+  }
+
+  // Today's play time (minutes), counted from the history since midnight (PlayStation, Xbox): asked again when the
+  // day, the entities or the state change, or after CC_PLAYED_TTL; while it plays, the minutes since then are added.
+  _playedToday(e, platform, state) {
+    const h = this._hass;
+    if (typeof h.callWS !== "function") return null;
+    const ids = Object.fromEntries(["media", "activity"].filter((r) => e[r]).map((r) => [r, e[r]]));
+    if (!Object.keys(ids).length) return null;
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    const key = `${Object.values(ids).join(",")}|${day.getTime()}`;
+    const now = Date.now();
+    const p = this._played;
+    if (!p || p.key !== key || p.state !== state || now - p.at > CC_PLAYED_TTL) this._askPlayed(ids, platform, key, state, day.getTime(), now);
+    const q = this._played;
+    if (q.mins == null) return null;
+    return q.mins + (state === "playing" && q.done ? Math.max(0, now - q.at) / 60000 : 0);
+  }
+
+  _askPlayed(ids, platform, key, state, from, now) {
+    const prev = this._played?.key === key ? this._played.mins : null;
+    const ask = (this._played = { key, state, at: now, mins: prev, done: false });
+    this._hass
+      .callWS({
+        type: "history/history_during_period",
+        start_time: new Date(from).toISOString(),
+        end_time: new Date(now).toISOString(),
+        entity_ids: Object.values(ids),
+        include_start_time_state: true,
+        significant_changes_only: false,
+        minimal_response: false,
+        // The Xbox tells a game from an app by its attributes.
+        no_attributes: platform !== "xbox",
+      })
+      .then((hist) => {
+        if (this._played !== ask) return;
+        ask.mins = ccPlayedMinutes(hist, ids, platform, from, now);
+        ask.done = true;
+        this._render();
+      })
+      .catch(() => {});
   }
 
   _dark() {
@@ -434,6 +481,7 @@ class ConsoleCard extends RcCard {
   // Up to four tiles, the ones this platform reports.
   _tileList(m) {
     const yes = (v) => (v == null ? null : [this._t(v ? "sub_on" : "sub_off"), "", null, v]);
+    const played = ["hourglass", "t_play_time", m.playTime != null ? [this._dur(m.playTime), ""] : null];
     const all = {
       playstation: [
         ["trophy", "t_level", m.level != null ? [this._fmt(m.level), "", m.levelProgress != null ? this._t("next_level", { n: this._fmt(m.levelProgress) }) : null] : null],
@@ -454,7 +502,7 @@ class ConsoleCard extends RcCard {
         ["bonus", "t_bonus", m.extended != null && m.extended > 0 ? [`+${this._dur(m.extended)}`, ""] : null],
       ],
     }[m.platform];
-    return (all || []).filter((t) => t[2]).slice(0, 4);
+    return (all ? [played, ...all] : []).filter((t) => t[2]).slice(0, 4);
   }
 
   _tile([icon, label, [value, unit, sub, good]]) {
@@ -692,6 +740,7 @@ const ccSchema = (booleans) => (lang) => [
   { name: "title", selector: { text: {} } },
   { name: "navigation_path", selector: { navigation: {} } },
   { name: "power", selector: { entity: { domain: ["switch", "remote", "input_boolean"] } } },
+  { name: "play_time", selector: { entity: { domain: ["sensor", "input_number"] } } },
   { name: "bonus_minutes", selector: { number: { min: 5, max: 30, step: 5, mode: "box", unit_of_measurement: "min" } } },
   ...rcBooleans(...booleans),
   {
@@ -701,12 +750,12 @@ const ccSchema = (booleans) => (lang) => [
   ...rcAdvanced(CC_I18N, lang, "entities", "language"),
 ];
 
-const CC_HELPERS = ["entity", "title", "power", "bonus_minutes", "zoom", "entities", "language"];
+const CC_HELPERS = ["entity", "title", "power", "play_time", "bonus_minutes", "zoom", "entities", "language"];
 
 const ConsoleCardEditor = rcEditor({
   card: ConsoleCard,
   helpers: CC_HELPERS,
-  schema: ccSchema(["show_title", "illustration", "animations", "show_trophies", "show_controls"]),
+  schema: ccSchema(["show_title", "illustration", "animations", "show_trophies", "show_play_time", "show_controls"]),
 });
 
 rcRegister(
@@ -767,7 +816,7 @@ class ConsoleMiniCard extends rcMini(
 const ConsoleMiniCardEditor = rcEditor({
   card: ConsoleMiniCard,
   helpers: CC_HELPERS,
-  schema: ccSchema(["show_title", "illustration", "animations", "show_trophies", "show_controls", "zoom"]),
+  schema: ccSchema(["show_title", "illustration", "animations", "show_trophies", "show_play_time", "show_controls", "zoom"]),
 });
 
 rcRegister(

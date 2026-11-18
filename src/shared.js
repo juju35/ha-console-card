@@ -1549,6 +1549,50 @@ const ccModel = (platform, text) => {
 // A duration in minutes, cut into hours and minutes.
 const ccHm = (mins) => ({ h: Math.floor(Math.max(0, mins) / 60), m: Math.round(Math.max(0, mins) % 60) });
 
+// A duration sensor in minutes, in its unit (d, h, min, s, ms); no unit: hours, history_stats' default.
+const ccMinutes = (st) => {
+  const n = ccNum(st);
+  if (n == null) return null;
+  const k = { d: 1440, h: 60, min: 1, s: 1 / 60, ms: 1 / 60000 }[st.attributes?.unit_of_measurement || "h"];
+  return k == null ? null : Math.max(0, n * k);
+};
+
+// Whether a state of the history plays: the media player playing or paused (on Xbox, a game, not an app), the PS5-MQTT
+// activity *playing* — the card's own rule for the playing state.
+const ccPlays = (role, state, attrs, platform) =>
+  role === "activity" ? ccNorm(state) === "playing" : (state === "playing" || state === "paused") && !(platform === "xbox" && attrs?.media_content_type === "app");
+
+// The minutes played between `from` and `to` (ms), from the compressed answer of history/history_during_period
+// ({ entity_id: [{ s, a, lu, lc }] }, times in seconds) for `ids` ({ role: entity_id }): the spans of every role,
+// overlapping ones counted once (the PSN media player and the PS5-MQTT activity both see the same game).
+const ccPlayedMinutes = (hist, ids, platform, from, to) => {
+  const spans = [];
+  for (const [role, id] of Object.entries(ids)) {
+    let attrs = {};
+    let start = null;
+    for (const r of hist?.[id] || []) {
+      if (r.a) attrs = r.a;
+      const t = Math.min(to, Math.max(from, ((r.lc ?? r.lu) || 0) * 1000));
+      const on = ccPlays(role, r.s, attrs, platform);
+      if (on && start == null) start = t;
+      else if (!on && start != null) {
+        spans.push([start, t]);
+        start = null;
+      }
+    }
+    if (start != null) spans.push([start, to]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let end = -Infinity;
+  for (const [a, b] of spans) {
+    const s = Math.max(a, end);
+    if (b > s) total += b - s;
+    end = Math.max(end, b);
+  }
+  return total / 60000;
+};
+
 // Strings of the console cards; the shared ones above (unavailable, editor basics) complete them.
 const CC_I18N = {
   en: {
@@ -1585,6 +1629,7 @@ const CC_I18N = {
     sw_allowed: "Allowed",
     sw_suspended: "Suspended",
     t_bonus: "Bonus time",
+    t_play_time: "Played today",
     platinum: "Platinum",
     gold: "Gold",
     silver: "Silver",
@@ -1609,6 +1654,9 @@ const CC_I18N = {
     ed_power_helper: "Turns the console on and off (PS5-MQTT), when the card does not find it",
     ed_bonus_minutes: "Bonus time",
     ed_bonus_minutes_helper: "Minutes added by the Switch's bonus button (5 to 30)",
+    ed_play_time: "Play time sensor",
+    ed_play_time_helper: "Today's play time from a sensor (e.g. history_stats); empty: counted from the history",
+    ed_show_play_time: "Play time today",
     ed_show_trophies: "Trophies",
     ed_show_controls: "Controls",
     ed_animations: "Animations",
@@ -1655,6 +1703,7 @@ const CC_I18N = {
     sw_allowed: "Autorisé",
     sw_suspended: "Suspendu",
     t_bonus: "Temps bonus",
+    t_play_time: "Joué aujourd'hui",
     platinum: "Platine",
     gold: "Or",
     silver: "Argent",
@@ -1679,6 +1728,9 @@ const CC_I18N = {
     ed_power_helper: "Allume et éteint la console (PS5-MQTT), quand la carte ne le trouve pas",
     ed_bonus_minutes: "Temps bonus",
     ed_bonus_minutes_helper: "Minutes ajoutées par le bouton bonus de la Switch (5 à 30)",
+    ed_play_time: "Capteur de temps de jeu",
+    ed_play_time_helper: "Temps de jeu du jour lu dans un capteur (ex. history_stats) ; vide : compté depuis l'historique",
+    ed_show_play_time: "Temps de jeu du jour",
     ed_show_trophies: "Trophées",
     ed_show_controls: "Commandes",
     ed_animations: "Animations",
@@ -1725,6 +1777,7 @@ const CC_I18N = {
     sw_allowed: "Erlaubt",
     sw_suspended: "Angehalten",
     t_bonus: "Bonuszeit",
+    t_play_time: "Heute gespielt",
     platinum: "Platin",
     gold: "Gold",
     silver: "Silber",
@@ -1749,6 +1802,9 @@ const CC_I18N = {
     ed_power_helper: "Schaltet die Konsole ein und aus (PS5-MQTT), wenn die Karte ihn nicht findet",
     ed_bonus_minutes: "Bonuszeit",
     ed_bonus_minutes_helper: "Minuten, die die Bonus-Taste der Switch hinzufügt (5 bis 30)",
+    ed_play_time: "Spielzeit-Sensor",
+    ed_play_time_helper: "Heutige Spielzeit aus einem Sensor (z. B. history_stats); leer: aus dem Verlauf gezählt",
+    ed_show_play_time: "Spielzeit heute",
     ed_show_trophies: "Trophäen",
     ed_show_controls: "Bedienelemente",
     ed_animations: "Animationen",
@@ -1795,6 +1851,7 @@ const CC_I18N = {
     sw_allowed: "Permitido",
     sw_suspended: "Suspendido",
     t_bonus: "Tiempo extra",
+    t_play_time: "Jugado hoy",
     platinum: "Platino",
     gold: "Oro",
     silver: "Plata",
@@ -1819,6 +1876,9 @@ const CC_I18N = {
     ed_power_helper: "Enciende y apaga la consola (PS5-MQTT) cuando la tarjeta no lo encuentra",
     ed_bonus_minutes: "Tiempo extra",
     ed_bonus_minutes_helper: "Minutos que añade el botón de tiempo extra de la Switch (de 5 a 30)",
+    ed_play_time: "Sensor de tiempo de juego",
+    ed_play_time_helper: "Tiempo de juego de hoy desde un sensor (p. ej. history_stats); vacío: contado desde el historial",
+    ed_show_play_time: "Tiempo de juego de hoy",
     ed_show_trophies: "Trofeos",
     ed_show_controls: "Controles",
     ed_animations: "Animaciones",
@@ -1865,6 +1925,7 @@ const CC_I18N = {
     sw_allowed: "Дозвољен",
     sw_suspended: "Паузиран",
     t_bonus: "Додатно време",
+    t_play_time: "Играно данас",
     platinum: "Платина",
     gold: "Злато",
     silver: "Сребро",
@@ -1889,6 +1950,9 @@ const CC_I18N = {
     ed_power_helper: "Укључује и искључује конзолу (PS5-MQTT) када га картица не пронађе",
     ed_bonus_minutes: "Додатно време",
     ed_bonus_minutes_helper: "Минути које додаје дугме за додатно време на Switch-у (од 5 до 30)",
+    ed_play_time: "Сензор времена играња",
+    ed_play_time_helper: "Данашње време играња из сензора (нпр. history_stats); празно: рачуна се из историје",
+    ed_show_play_time: "Време играња данас",
     ed_show_trophies: "Трофеји",
     ed_show_controls: "Контроле",
     ed_animations: "Анимације",
@@ -1935,6 +1999,7 @@ const CC_I18N = {
     sw_allowed: "Dozvoljen",
     sw_suspended: "Pauziran",
     t_bonus: "Dodatno vreme",
+    t_play_time: "Igrano danas",
     platinum: "Platina",
     gold: "Zlato",
     silver: "Srebro",
@@ -1959,6 +2024,9 @@ const CC_I18N = {
     ed_power_helper: "Uključuje i isključuje konzolu (PS5-MQTT) kada ga kartica ne pronađe",
     ed_bonus_minutes: "Dodatno vreme",
     ed_bonus_minutes_helper: "Minuti koje dodaje dugme za dodatno vreme na Switch-u (od 5 do 30)",
+    ed_play_time: "Senzor vremena igranja",
+    ed_play_time_helper: "Današnje vreme igranja iz senzora (npr. history_stats); prazno: računa se iz istorije",
+    ed_show_play_time: "Vreme igranja danas",
     ed_show_trophies: "Trofeji",
     ed_show_controls: "Kontrole",
     ed_animations: "Animacije",
@@ -2005,6 +2073,7 @@ const CC_I18N = {
     sw_allowed: "Consentito",
     sw_suspended: "Sospeso",
     t_bonus: "Tempo extra",
+    t_play_time: "Giocato oggi",
     platinum: "Platino",
     gold: "Oro",
     silver: "Argento",
@@ -2029,6 +2098,9 @@ const CC_I18N = {
     ed_power_helper: "Accende e spegne la console (PS5-MQTT) quando la scheda non lo trova",
     ed_bonus_minutes: "Tempo extra",
     ed_bonus_minutes_helper: "Minuti aggiunti dal pulsante tempo extra della Switch (da 5 a 30)",
+    ed_play_time: "Sensore del tempo di gioco",
+    ed_play_time_helper: "Tempo di gioco di oggi da un sensore (es. history_stats); vuoto: calcolato dalla cronologia",
+    ed_show_play_time: "Tempo di gioco di oggi",
     ed_show_trophies: "Trofei",
     ed_show_controls: "Comandi",
     ed_animations: "Animazioni",
@@ -2075,6 +2147,7 @@ const CC_I18N = {
     sw_allowed: "Toegestaan",
     sw_suspended: "Gepauzeerd",
     t_bonus: "Extra tijd",
+    t_play_time: "Vandaag gespeeld",
     platinum: "Platina",
     gold: "Goud",
     silver: "Zilver",
@@ -2099,6 +2172,9 @@ const CC_I18N = {
     ed_power_helper: "Zet de console aan en uit (PS5-MQTT) als de kaart hem niet vindt",
     ed_bonus_minutes: "Extra tijd",
     ed_bonus_minutes_helper: "Minuten die de extra-tijdknop van de Switch toevoegt (5 tot 30)",
+    ed_play_time: "Speeltijdsensor",
+    ed_play_time_helper: "Speeltijd van vandaag uit een sensor (bijv. history_stats); leeg: geteld uit de geschiedenis",
+    ed_show_play_time: "Speeltijd vandaag",
     ed_show_trophies: "Trofeeën",
     ed_show_controls: "Bediening",
     ed_animations: "Animaties",
@@ -2145,6 +2221,7 @@ const CC_I18N = {
     sw_allowed: "Permitido",
     sw_suspended: "Suspenso",
     t_bonus: "Tempo extra",
+    t_play_time: "Jogado hoje",
     platinum: "Platina",
     gold: "Ouro",
     silver: "Prata",
@@ -2169,6 +2246,9 @@ const CC_I18N = {
     ed_power_helper: "Liga e desliga a consola (PS5-MQTT) quando o cartão não o encontra",
     ed_bonus_minutes: "Tempo extra",
     ed_bonus_minutes_helper: "Minutos acrescentados pelo botão de tempo extra da Switch (de 5 a 30)",
+    ed_play_time: "Sensor de tempo de jogo",
+    ed_play_time_helper: "Tempo de jogo de hoje a partir de um sensor (p. ex. history_stats); vazio: contado a partir do histórico",
+    ed_show_play_time: "Tempo de jogo de hoje",
     ed_show_trophies: "Troféus",
     ed_show_controls: "Controlos",
     ed_animations: "Animações",
@@ -2215,6 +2295,7 @@ const CC_I18N = {
     sw_allowed: "Dozwolone",
     sw_suspended: "Wstrzymane",
     t_bonus: "Dodatkowy czas",
+    t_play_time: "Grano dziś",
     platinum: "Platyna",
     gold: "Złoto",
     silver: "Srebro",
@@ -2239,6 +2320,9 @@ const CC_I18N = {
     ed_power_helper: "Włącza i wyłącza konsolę (PS5-MQTT), gdy karta go nie znajdzie",
     ed_bonus_minutes: "Dodatkowy czas",
     ed_bonus_minutes_helper: "Minuty dodawane przyciskiem dodatkowego czasu na Switchu (od 5 do 30)",
+    ed_play_time: "Czujnik czasu gry",
+    ed_play_time_helper: "Dzisiejszy czas gry z czujnika (np. history_stats); puste: liczony z historii",
+    ed_show_play_time: "Czas gry dzisiaj",
     ed_show_trophies: "Trofea",
     ed_show_controls: "Sterowanie",
     ed_animations: "Animacje",
@@ -2285,6 +2369,7 @@ const CC_I18N = {
     sw_allowed: "Permis",
     sw_suspended: "Suspendat",
     t_bonus: "Timp suplimentar",
+    t_play_time: "Jucat azi",
     platinum: "Platină",
     gold: "Aur",
     silver: "Argint",
@@ -2309,6 +2394,9 @@ const CC_I18N = {
     ed_power_helper: "Pornește și oprește consola (PS5-MQTT) când cardul nu îl găsește",
     ed_bonus_minutes: "Timp suplimentar",
     ed_bonus_minutes_helper: "Minutele adăugate de butonul de timp suplimentar al Switch (între 5 și 30)",
+    ed_play_time: "Senzor de timp de joc",
+    ed_play_time_helper: "Timpul de joc de azi dintr-un senzor (ex. history_stats); gol: calculat din istoric",
+    ed_show_play_time: "Timp de joc azi",
     ed_show_trophies: "Trofee",
     ed_show_controls: "Comenzi",
     ed_animations: "Animații",
@@ -2355,6 +2443,7 @@ const CC_I18N = {
     sw_allowed: "Tilladt",
     sw_suspended: "Sat på pause",
     t_bonus: "Ekstra tid",
+    t_play_time: "Spillet i dag",
     platinum: "Platin",
     gold: "Guld",
     silver: "Sølv",
@@ -2379,6 +2468,9 @@ const CC_I18N = {
     ed_power_helper: "Tænder og slukker konsollen (PS5-MQTT), når kortet ikke finder den",
     ed_bonus_minutes: "Ekstra tid",
     ed_bonus_minutes_helper: "Minutter, som Switchens knap for ekstra tid tilføjer (5 til 30)",
+    ed_play_time: "Spilletidssensor",
+    ed_play_time_helper: "Dagens spilletid fra en sensor (f.eks. history_stats); tom: talt fra historikken",
+    ed_show_play_time: "Spilletid i dag",
     ed_show_trophies: "Trofæer",
     ed_show_controls: "Betjening",
     ed_animations: "Animationer",
@@ -2425,6 +2517,7 @@ const CC_I18N = {
     sw_allowed: "Tillåten",
     sw_suspended: "Pausad",
     t_bonus: "Extra tid",
+    t_play_time: "Spelat i dag",
     platinum: "Platina",
     gold: "Guld",
     silver: "Silver",
@@ -2449,6 +2542,9 @@ const CC_I18N = {
     ed_power_helper: "Slår på och stänger av konsolen (PS5-MQTT) när kortet inte hittar den",
     ed_bonus_minutes: "Extra tid",
     ed_bonus_minutes_helper: "Minuter som Switchens knapp för extra tid lägger till (5 till 30)",
+    ed_play_time: "Speltidssensor",
+    ed_play_time_helper: "Dagens speltid från en sensor (t.ex. history_stats); tom: räknad från historiken",
+    ed_show_play_time: "Speltid i dag",
     ed_show_trophies: "Troféer",
     ed_show_controls: "Kontroller",
     ed_animations: "Animationer",
@@ -2495,6 +2591,7 @@ const CC_I18N = {
     sw_allowed: "Разрешен",
     sw_suspended: "Спрян",
     t_bonus: "Допълнително време",
+    t_play_time: "Играно днес",
     platinum: "Платина",
     gold: "Злато",
     silver: "Сребро",
@@ -2519,6 +2616,9 @@ const CC_I18N = {
     ed_power_helper: "Включва и изключва конзолата (PS5-MQTT), когато картата не го намира",
     ed_bonus_minutes: "Допълнително време",
     ed_bonus_minutes_helper: "Минути, добавяни от бутона за допълнително време на Switch (от 5 до 30)",
+    ed_play_time: "Сензор за време за игра",
+    ed_play_time_helper: "Днешното време за игра от сензор (напр. history_stats); празно: изчислено от историята",
+    ed_show_play_time: "Време за игра днес",
     ed_show_trophies: "Трофеи",
     ed_show_controls: "Управление",
     ed_animations: "Анимации",
@@ -2565,6 +2665,7 @@ const CC_I18N = {
     sw_allowed: "Разрешены",
     sw_suspended: "Приостановлены",
     t_bonus: "Дополнительное время",
+    t_play_time: "Сыграно сегодня",
     platinum: "Платина",
     gold: "Золото",
     silver: "Серебро",
@@ -2589,6 +2690,9 @@ const CC_I18N = {
     ed_power_helper: "Включает и выключает консоль (PS5-MQTT), если карточка его не находит",
     ed_bonus_minutes: "Дополнительное время",
     ed_bonus_minutes_helper: "Минуты, добавляемые кнопкой дополнительного времени Switch (от 5 до 30)",
+    ed_play_time: "Датчик времени игры",
+    ed_play_time_helper: "Сегодняшнее время игры из датчика (например, history_stats); пусто: считается по истории",
+    ed_show_play_time: "Время игры сегодня",
     ed_show_trophies: "Трофеи",
     ed_show_controls: "Управление",
     ed_animations: "Анимация",
@@ -2635,6 +2739,7 @@ const CC_I18N = {
     sw_allowed: "Дозволено",
     sw_suspended: "Призупинено",
     t_bonus: "Додатковий час",
+    t_play_time: "Зіграно сьогодні",
     platinum: "Платина",
     gold: "Золото",
     silver: "Срібло",
@@ -2659,6 +2764,9 @@ const CC_I18N = {
     ed_power_helper: "Вмикає й вимикає консоль (PS5-MQTT), якщо картка його не знаходить",
     ed_bonus_minutes: "Додатковий час",
     ed_bonus_minutes_helper: "Хвилини, які додає кнопка додаткового часу Switch (від 5 до 30)",
+    ed_play_time: "Датчик часу гри",
+    ed_play_time_helper: "Сьогоднішній час гри з датчика (наприклад, history_stats); порожньо: рахується з історії",
+    ed_show_play_time: "Час гри сьогодні",
     ed_show_trophies: "Трофеї",
     ed_show_controls: "Керування",
     ed_animations: "Анімація",
@@ -2705,6 +2813,7 @@ const CC_I18N = {
     sw_allowed: "Engedélyezve",
     sw_suspended: "Felfüggesztve",
     t_bonus: "Extra idő",
+    t_play_time: "Ma játszva",
     platinum: "Platina",
     gold: "Arany",
     silver: "Ezüst",
@@ -2729,6 +2838,9 @@ const CC_I18N = {
     ed_power_helper: "Be- és kikapcsolja a konzolt (PS5-MQTT), ha a kártya nem találja",
     ed_bonus_minutes: "Extra idő",
     ed_bonus_minutes_helper: "A Switch extra idő gombja által hozzáadott percek (5–30)",
+    ed_play_time: "Játékidő-érzékelő",
+    ed_play_time_helper: "A mai játékidő egy érzékelőből (pl. history_stats); üres: az előzményekből számolva",
+    ed_show_play_time: "Mai játékidő",
     ed_show_trophies: "Trófeák",
     ed_show_controls: "Vezérlők",
     ed_animations: "Animációk",
@@ -2775,6 +2887,7 @@ const CC_I18N = {
     sw_allowed: "Povolený",
     sw_suspended: "Pozastavený",
     t_bonus: "Čas navyše",
+    t_play_time: "Hrané dnes",
     platinum: "Platina",
     gold: "Zlato",
     silver: "Striebro",
@@ -2799,6 +2912,9 @@ const CC_I18N = {
     ed_power_helper: "Zapína a vypína konzolu (PS5-MQTT), keď ho karta nenájde",
     ed_bonus_minutes: "Čas navyše",
     ed_bonus_minutes_helper: "Minúty, ktoré pridá tlačidlo času navyše na Switchi (5 až 30)",
+    ed_play_time: "Senzor času hrania",
+    ed_play_time_helper: "Dnešný čas hrania zo senzora (napr. history_stats); prázdne: počíta sa z histórie",
+    ed_show_play_time: "Čas hrania dnes",
     ed_show_trophies: "Trofeje",
     ed_show_controls: "Ovládanie",
     ed_animations: "Animácie",
@@ -2845,6 +2961,7 @@ const CC_I18N = {
     sw_allowed: "Povolen",
     sw_suspended: "Pozastaven",
     t_bonus: "Čas navíc",
+    t_play_time: "Hráno dnes",
     platinum: "Platina",
     gold: "Zlato",
     silver: "Stříbro",
@@ -2869,6 +2986,9 @@ const CC_I18N = {
     ed_power_helper: "Zapíná a vypíná konzoli (PS5-MQTT), když ho karta nenajde",
     ed_bonus_minutes: "Čas navíc",
     ed_bonus_minutes_helper: "Minuty, které přidá tlačítko času navíc na Switchi (5 až 30)",
+    ed_play_time: "Senzor doby hraní",
+    ed_play_time_helper: "Dnešní doba hraní ze senzoru (např. history_stats); prázdné: počítá se z historie",
+    ed_show_play_time: "Doba hraní dnes",
     ed_show_trophies: "Trofeje",
     ed_show_controls: "Ovládání",
     ed_animations: "Animace",
@@ -2915,6 +3035,7 @@ const CC_I18N = {
     sw_allowed: "Dovoljena",
     sw_suspended: "Začasno ustavljena",
     t_bonus: "Dodatni čas",
+    t_play_time: "Igrano danes",
     platinum: "Platina",
     gold: "Zlato",
     silver: "Srebro",
@@ -2939,6 +3060,9 @@ const CC_I18N = {
     ed_power_helper: "Vklopi in izklopi konzolo (PS5-MQTT), ko ga kartica ne najde",
     ed_bonus_minutes: "Dodatni čas",
     ed_bonus_minutes_helper: "Minute, ki jih doda gumb za dodatni čas na Switchu (od 5 do 30)",
+    ed_play_time: "Senzor časa igranja",
+    ed_play_time_helper: "Današnji čas igranja iz senzorja (npr. history_stats); prazno: šteto iz zgodovine",
+    ed_show_play_time: "Čas igranja danes",
     ed_show_trophies: "Trofeje",
     ed_show_controls: "Upravljanje",
     ed_animations: "Animacije",
@@ -2985,6 +3109,7 @@ const CC_I18N = {
     sw_allowed: "Atļauta",
     sw_suspended: "Apturēta",
     t_bonus: "Papildu laiks",
+    t_play_time: "Spēlēts šodien",
     platinum: "Platīns",
     gold: "Zelts",
     silver: "Sudrabs",
@@ -3009,6 +3134,9 @@ const CC_I18N = {
     ed_power_helper: "Ieslēdz un izslēdz konsoli (PS5-MQTT), ja kartīte to neatrod",
     ed_bonus_minutes: "Papildu laiks",
     ed_bonus_minutes_helper: "Minūtes, ko pievieno Switch papildu laika poga (no 5 līdz 30)",
+    ed_play_time: "Spēles laika sensors",
+    ed_play_time_helper: "Šodienas spēles laiks no sensora (piem., history_stats); tukšs: skaitīts no vēstures",
+    ed_show_play_time: "Spēles laiks šodien",
     ed_show_trophies: "Trofejas",
     ed_show_controls: "Vadīklas",
     ed_animations: "Animācijas",
@@ -3055,6 +3183,7 @@ const CC_I18N = {
     sw_allowed: "Επιτρέπεται",
     sw_suspended: "Σε παύση",
     t_bonus: "Επιπλέον χρόνος",
+    t_play_time: "Παίχτηκε σήμερα",
     platinum: "Πλατίνα",
     gold: "Χρυσό",
     silver: "Ασημένιο",
@@ -3079,6 +3208,9 @@ const CC_I18N = {
     ed_power_helper: "Ανάβει και σβήνει την κονσόλα (PS5-MQTT), όταν η κάρτα δεν τον βρίσκει",
     ed_bonus_minutes: "Επιπλέον χρόνος",
     ed_bonus_minutes_helper: "Λεπτά που προσθέτει το κουμπί επιπλέον χρόνου του Switch (5 έως 30)",
+    ed_play_time: "Αισθητήρας χρόνου παιχνιδιού",
+    ed_play_time_helper: "Ο σημερινός χρόνος παιχνιδιού από αισθητήρα (π.χ. history_stats)· κενό: υπολογίζεται από το ιστορικό",
+    ed_show_play_time: "Χρόνος παιχνιδιού σήμερα",
     ed_show_trophies: "Τρόπαια",
     ed_show_controls: "Χειριστήρια",
     ed_animations: "Κινούμενα σχέδια",

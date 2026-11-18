@@ -202,6 +202,47 @@ test("banner: night by illustration_theme, else the dark theme alone; unique ids
   assert.doesNotMatch(html({ show_controls: false }), /act-power/);
 });
 
+test("play time today: a sensor in its unit, else counted from the history, overlaps once; hidden on demand", async () => {
+  assert.equal(cc.ccMinutes(st("sensor.t", "1.5", { unit_of_measurement: "h" })), 90);
+  assert.equal(cc.ccMinutes(st("sensor.t", "2")), 120, "no unit: hours (history_stats)");
+  assert.equal(cc.ccMinutes(st("sensor.t", "45", { unit_of_measurement: "min" })), 45);
+  assert.equal(cc.ccMinutes(st("sensor.t", "600", { unit_of_measurement: "s" })), 10);
+  assert.equal(cc.ccMinutes(st("sensor.t", "unavailable")), null);
+  // A sensor, on any platform (the Switch too).
+  const xbox = make("console-card", { ...XBOX, play_time: "sensor.xbox_play_time_today" });
+  assert.equal(xbox._items.playTime, 165);
+  assert.match(xbox.shadowRoot.innerHTML, /Played today.*2 h 45 min/s);
+  assert.match(make("console-card", { ...NS, play_time: "sensor.xbox_play_time_today" }).shadowRoot.innerHTML, /Played today/);
+  assert.doesNotMatch(make("console-card", { ...XBOX, play_time: "sensor.xbox_play_time_today", show_play_time: false }).shadowRoot.innerHTML, /Played today/);
+  // The history: PSN playing 10:00–11:00, PS5-MQTT playing 10:30–11:30 → 90 min; an Xbox app is not a game.
+  const T = (hh, mm = 0) => new Date(2026, 10, 18, hh, mm).getTime() / 1000;
+  const from = new Date(2026, 10, 18).getTime();
+  const to = new Date(2026, 10, 18, 12).getTime();
+  const hist = {
+    "media_player.ps": [{ s: "off", lu: T(0) }, { s: "playing", lu: T(10) }, { s: "off", lu: T(11) }],
+    "sensor.act": [{ s: "none", lu: T(0) }, { s: "playing", lu: T(10, 30) }, { s: "idle", lu: T(11, 30) }],
+  };
+  assert.equal(cc.ccPlayedMinutes(hist, { media: "media_player.ps", activity: "sensor.act" }, "playstation", from, to), 90);
+  const xh = { "media_player.x": [{ s: "playing", a: { media_content_type: "app" }, lu: T(9) }, { s: "playing", a: { media_content_type: "game" }, lu: T(10) }] };
+  assert.equal(cc.ccPlayedMinutes(xh, { media: "media_player.x" }, "xbox", from, to), 120, "still playing: up to now");
+  // The card asks Home Assistant's history since midnight, then shows it, the minutes since then added while it plays.
+  const asked = [];
+  const h = makeHass({}, { callWS: (msg) => (asked.push(msg), Promise.resolve({ "media_player.playstation_5": [{ s: "playing", lu: Date.now() / 1000 - 3600 }] })) });
+  const card = make("console-card", PS, h);
+  assert.equal(asked[0].type, "history/history_during_period");
+  assert.deepEqual(json(asked[0].entity_ids), ["media_player.playstation_5", "sensor.ps5_activity"]);
+  assert.equal(asked[0].no_attributes, true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(Math.abs(card._items.playTime - 60) < 1);
+  assert.match(card.shadowRoot.innerHTML, /Played today.*1 h/s);
+  card.hass = h;
+  assert.equal(asked.length, 1, "not asked again on each update");
+  // The Switch's own screen time is on its ring: no history asked.
+  const sw = [];
+  make("console-card", NS, makeHass({}, { callWS: (m) => (sw.push(m), Promise.resolve({})) }));
+  assert.equal(sw.length, 0);
+});
+
 test("no console: a message", () => {
   const h = makeHass();
   const card = make("console-card", { entity: "sensor.unknown" }, { ...h, states: { ...h.states, "sensor.unknown": st("sensor.unknown", "1") } });
