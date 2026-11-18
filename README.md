@@ -10,6 +10,12 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/images/icon.svg" alt="Console Card" width="120"></p>
 
+<p align="center">
+  <a href="https://www.playstation.com/"><img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/images/playstation.svg" alt="PlayStation" height="28"></a>&nbsp;&nbsp;
+  <a href="https://www.xbox.com/"><img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/images/xbox.svg" alt="Xbox" height="28"></a>&nbsp;&nbsp;
+  <a href="https://www.nintendo.com/"><img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/images/nintendo-switch.svg" alt="Nintendo Switch" height="28"></a>
+</p>
+
 An illustrated Lovelace card for Home Assistant's **game consoles**: the TV and the console in their corner of the living room, the game being played with its cover and how long it has been on, the account's trophies or Gamerscore, a Nintendo Switch's screen time, and the power, home and bonus-time controls. It works with the PlayStation Network, PS5-MQTT, Xbox and Nintendo Switch Parental Controls integrations.
 
 [![Open your Home Assistant instance and open a repository inside the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=juju35&repository=ha-console-card&category=plugin)
