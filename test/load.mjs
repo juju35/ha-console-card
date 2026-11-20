@@ -88,7 +88,7 @@ export const load = () => {
   const code = [read("shared"), ...cards.map((c) => `{\n${read(c)}}\n`)].join("\n");
   return vm.runInContext(
     `${code}
-    ({ RcCard, RC_I18N, CC_I18N, rcLang, ccFind, ccConsoles, ccModel, ccMinutes, ccPlayedMinutes, customElements, window,
+    ({ RcCard, RC_I18N, CC_I18N, rcLang, ccFind, ccFindKey, ccConsoles, ccModel, ccMinutes, ccPlayedMinutes, customElements, window,
        cards: Object.fromEntries(${JSON.stringify([...cards, "console-mini-card"])}.map((t) => [t, customElements.get(t)])) })`,
     ctx,
   );

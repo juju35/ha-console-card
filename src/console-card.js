@@ -228,8 +228,9 @@ class ConsoleCard extends RcCard {
     const c = this._config;
     const id = this._entityId();
     const anchor = id ? h.states[id] : undefined;
-    // The roles read the states too (an entity unavailable after a restart is skipped): found again when they change.
-    const e = rcMemo((this._memo ||= {}), "find", [id, c.entities, c.power, h.entities, h.devices, h.states], () => ccFind(h, id, { ...(c.power ? { power: c.power } : {}), ...(c.entities || {}) }));
+    // The roles read the states too (an entity without a state yet is skipped): found again when what they read of
+    // them changes (ccFindKey), not on every state change.
+    const e = rcMemo((this._memo ||= {}), "find", [id, c.entities, c.power, h.entities, h.devices, ccFindKey(h, id)], () => ccFind(h, id, { ...(c.power ? { power: c.power } : {}), ...(c.entities || {}) }));
     const st = (role) => (e[role] ? h.states[e[role]] : undefined);
     const ok = (s) => s && !rcUnavailable(s);
     const platform = e.platform;
@@ -681,7 +682,7 @@ class ConsoleCard extends RcCard {
     .banner.night .ground { background: #2a2420; box-shadow: inset 0 2px 0 #3d342d; }
     /* The mini card's expand / collapse button: 24 px, frosted, 5 px from the banner's top right corner. */
     .banner .zoom { position: absolute; z-index: 2; top: 5px; right: 5px; width: 24px; height: 24px; margin: 0; color: #33506b;
-                    background: rgba(255,255,255,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7); backdrop-filter: blur(4px); }
+                    background: rgba(255,255,255,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
     .banner.night .zoom { color: #fff; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
     .banner .zoom:hover { background: rgba(255,255,255,.75); color: #33506b; }
     .banner.night .zoom:hover { background: rgba(255,255,255,.22); color: #fff; }

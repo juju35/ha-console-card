@@ -291,3 +291,26 @@ test("translations: every language has every key of English, with the same place
   const fr = make("console-card", { ...NS, language: "fr" });
   assert.equal(fr._status(fr._items), "40 min restantes");
 });
+
+test("discovery runs again only when what it reads of the states changes, not on every state change", () => {
+  const h = makeHass();
+  const id = "media_player.playstation_5";
+  const key = cc.ccFindKey(h, id);
+  // A state update of a found entity (same entities present): same key.
+  const h2 = { ...h, states: { ...h.states, "sensor.player_trophy_level": { ...h.states["sensor.player_trophy_level"], state: "999" } } };
+  assert.equal(cc.ccFindKey(h2, id), key);
+  // An entity of the console's integration losing its state: new key, ccFind runs again.
+  const { "sensor.player_trophy_level": _gone, ...rest } = h.states;
+  assert.notEqual(cc.ccFindKey({ ...h, states: rest }, id), key);
+  // Xbox: the title the console plays picks the account.
+  const x = "media_player.xbox_series_x";
+  const hx = { ...h, states: { ...h.states, [x]: { ...h.states[x], attributes: { ...h.states[x].attributes, media_title: "Another game" } } } };
+  assert.notEqual(cc.ccFindKey(hx, x), cc.ccFindKey(h, x));
+  // The card keeps its roles across an unrelated update.
+  const card = make("console-card", PS, h);
+  card._collect();
+  const memo = card._memo.find.value;
+  card._hass = h2;
+  card._collect();
+  assert.equal(card._memo.find.value, memo);
+});
