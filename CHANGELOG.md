@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 - 2026-11-20
+
+### Fixes
+- The mini card's detail button keeps its frosted glass on older Safari / iOS (`-webkit-backdrop-filter`).
+
+### Performance
+- The PS5-MQTT console is looked for among the MQTT entities only, not every entity of Home Assistant, on each state change.
+- About 425 lines of the shared base that this card never used are gone: the bundle shrinks from 229 KB to 207 KB (139 KB to 118 KB with the translations split).
+
 ## 1.1.0 - 2026-11-18
 
 ### Features
