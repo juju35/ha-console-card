@@ -1232,7 +1232,7 @@ const ccMqttRole = (hass, id) => {
 // consoles that no media player stands for, then the Nintendo Switches (one per device).
 const ccConsoles = (hass) => {
   const players = Object.keys(hass.entities || {}).filter((id) => id.startsWith("media_player.") && ["playstation", "xbox"].includes(ccPlatformOf(hass, id)));
-  const mqtt = Object.keys(hass.entities || {}).filter((id) => ccMqttRole(hass, id) === "power");
+  const mqtt = (ccPlatformEntities(hass).mqtt || []).filter((id) => ccMqttRole(hass, id) === "power");
   const switches = [];
   const seen = new Set();
   for (const id of ccPlatformEntities(hass).nintendo_parental_controls || []) {
@@ -1346,7 +1346,9 @@ const ccFind = (hass, id, overrides = {}) => {
   if (platform === "xbox") out.power = mine.find((e) => e.startsWith("remote."));
   // PS5-MQTT: its power switch and activity sensor, on its own device; with a PSN media player, the MQTT console whose
   // name matches the media player's model (PS5 or PS4), else the first one.
-  const mqtt = Object.keys(hass.entities || {}).filter((e) => ccMqttRole(hass, e));
+  // Only the MQTT entities can be PS5-MQTT ones: the registry's per-integration index spares a scan of every entity
+  // (this runs again on each state change).
+  const mqtt = (ccPlatformEntities(hass).mqtt || []).filter((e) => ccMqttRole(hass, e));
   const mqttDevs = [...new Set(mqtt.map((e) => ccDeviceOf(hass, e)))];
   const model = ccNorm(hass.devices?.[device]?.model || hass.devices?.[device]?.name || "").match(/ps5|ps4|playstation_5|playstation_4/)?.[0]?.replace("playstation_", "ps");
   const mdev = ccMqttRole(hass, id)
