@@ -1371,6 +1371,27 @@ const ccFind = (hass, id, overrides = {}) => {
   return { ...out, ...overrides };
 };
 
+// What ccFind reads from the states, as a string: which of its candidate entities have a state (the console's device,
+// its integration's entities — the account's among them —, the MQTT ones) and, for an Xbox, the title the console
+// plays and its integration's sensors (the account playing it). The card finds the roles again only when it changes,
+// not on every state change of Home Assistant.
+const ccFindKey = (hass, id) => {
+  if (!id) return "";
+  const platform = ccPlatformOf(hass, id);
+  if (!platform) return "";
+  const integration = Object.keys(CC_PLATFORMS).find((p) => CC_PLATFORMS[p] === platform);
+  const index = ccPlatformEntities(hass);
+  const own = ccDeviceEntities(hass)[ccDeviceOf(hass, id)] || [];
+  const ids = [...own, ...(index[integration] || []), ...(platform === "switch" ? [] : index.mqtt || [])];
+  let key = platform;
+  for (const e of ids) key += hass.states[e] ? "1" : "0";
+  if (platform === "xbox") {
+    key += `|${hass.states[id]?.attributes.media_title ?? ""}`;
+    for (const e of index[integration] || []) if (e.startsWith("sensor.")) key += `|${hass.states[e]?.state ?? ""}`;
+  }
+  return key;
+};
+
 // The model drawn: ps5, ps4, xsx, xss, xone or switch, from the device's model and name.
 const ccModel = (platform, text) => {
   const t = ccNorm(text);

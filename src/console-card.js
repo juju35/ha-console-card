@@ -228,8 +228,9 @@ class ConsoleCard extends RcCard {
     const c = this._config;
     const id = this._entityId();
     const anchor = id ? h.states[id] : undefined;
-    // The roles read the states too (an entity unavailable after a restart is skipped): found again when they change.
-    const e = rcMemo((this._memo ||= {}), "find", [id, c.entities, c.power, h.entities, h.devices, h.states], () => ccFind(h, id, { ...(c.power ? { power: c.power } : {}), ...(c.entities || {}) }));
+    // The roles read the states too (an entity without a state yet is skipped): found again when what they read of
+    // them changes (ccFindKey), not on every state change.
+    const e = rcMemo((this._memo ||= {}), "find", [id, c.entities, c.power, h.entities, h.devices, ccFindKey(h, id)], () => ccFind(h, id, { ...(c.power ? { power: c.power } : {}), ...(c.entities || {}) }));
     const st = (role) => (e[role] ? h.states[e[role]] : undefined);
     const ok = (s) => s && !rcUnavailable(s);
     const platform = e.platform;

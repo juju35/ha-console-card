@@ -7,6 +7,7 @@
 
 ### Performance
 - The PS5-MQTT console is looked for among the MQTT entities only, not every entity of Home Assistant, on each state change.
+- The console's entities (and its PSN / Xbox account) are found again only when what that search reads of the states changes (an entity of its device, integration or MQTT appearing or going, the title an Xbox plays), not on every state change of Home Assistant.
 - About 425 lines of the shared base that this card never used are gone: the bundle shrinks from 229 KB to 207 KB (139 KB to 118 KB with the translations split).
 
 ## 1.1.0 - 2026-11-18
