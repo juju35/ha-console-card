@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 - 2026-11-25
+
+### Features
+
+- Switch: tapping the screen time ring opens a panel to set today's limit (− / + in 15-minute steps, *No limit*), on the `max_screentime` number found by the discovery or set in `entities` (#17)
+- Switch: `bonus_minutes` takes a list, offered as bonus choices in that panel, the first one on the bonus button (#16)
+
 ## 1.1.4 - 2026-11-24
 
 ### Maintenance

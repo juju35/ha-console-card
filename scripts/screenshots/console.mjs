@@ -3,9 +3,10 @@
 import { pair, shoot } from "./harness.mjs";
 import { setup } from "./mock.mjs";
 
+// cc-switch-screen-time: the screen time panel, opened by tapping the ring (scene switch-screen-time in mock.mjs).
 // Stills: animations: false keeps the TV's light and gleam still, so a capture only changes when the card does.
 const still = (file, s) => pair(file, { ...s, config: { animations: false, ...s.config } });
-const scenes = ["ps-playing", "ps-standby", "xbox-playing", "xbox-online", "switch-online", "switch-time-up", "switch-suspended", "ps5-mqtt"].flatMap((scene) => still(scene, { scene }));
+const scenes = ["ps-playing", "ps-standby", "xbox-playing", "xbox-online", "switch-online", "switch-time-up", "switch-suspended", "switch-screen-time", "ps5-mqtt"].flatMap((scene) => still(scene, { scene }));
 await shoot({ prefix: "cc", tag: "console-card", shots: [...scenes, ...still("classic", { scene: "ps-playing", config: { illustration: false } })], setup });
 await shoot({
   prefix: "cc-mini",

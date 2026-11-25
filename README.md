@@ -38,12 +38,12 @@ The cards share the look of the other ha-* cards (illustrated header with a stat
 `custom:console-card` — The console of `entity` (the one playing, else the first one of the home, when none is set).
 
 - **Illustrated header**: a 90 px banner, the TV and the console on a wooden TV stand, each model drawn (PS5, PS4, Xbox Series X, Series S, One, Switch and Switch 2 in their dock), on a floor strip; the name and the state on the wall at the left, beside a round badge with the platform's icon in the state's colour (PlayStation blue, Xbox green, Nintendo red while on; grey in standby; amber suspended, red when the time is up). While it plays, the TV shows the game's cover, its light breathes on the wall and a gleam crosses the screen; online, the home screen; in standby, a dark screen and the console's LED off. By night (with a dark Home Assistant theme; `illustration_theme: day | night` forces it) the room is dark. `illustration: false` brings back the classic header (name, model and room, a state pill)
-- **What is on screen**: the game's cover, its title and how long it has been played (*For 1 h 12 min*), the genre and the achievements' progress on Xbox (*34 / 50 achievements*); the app in use; *Home screen*; or when the console was last seen. On a Switch: a ring of the day's screen time (*1 h 20 min of 2 h*, *40 min left*, *No limit*, *Time's up*)
+- **What is on screen**: the game's cover, its title and how long it has been played (*For 1 h 12 min*), the genre and the achievements' progress on Xbox (*34 / 50 achievements*); the app in use; *Home screen*; or when the console was last seen. On a Switch: a ring of the day's screen time (*1 h 20 min of 2 h*, *40 min left*, *No limit*, *Time's up*); tapping it opens the **screen time panel**: today's limit with − / + in 15-minute steps (sent once the taps stop) and a *No limit* link, plus the bonus choices when `bonus_minutes` is a list; ⓘ opens the details, ✕ or a click anywhere else closes it
 - **States**: **playing**, **online** (on, on the home screen or in an app), **standby**, *offline* when the console cannot report; on a Switch, **suspended** (the software is suspended) and **time's up** (no time left today)
 - **Play time today** (*Played today*, the first tile): counted from Home Assistant's history since midnight (PlayStation, Xbox, PS5-MQTT), or read from a sensor of yours with `play_time` (a `history_stats` sensor, for instance, on any platform); `show_play_time: false` hides it
 - **Up to four tiles**, what the platform reports: the trophy level and the progress to the next one, PlayStation Plus (PlayStation); the Gamerscore, the party, the friends, the free storage, Game Pass (Xbox); the bedtime, the restriction mode, the software allowed or suspended, today's bonus time (Switch)
 - **Trophies** by grade (platinum, gold, silver, bronze) for a PlayStation account (`show_trophies: false` hides them)
-- **Controls**: **Turn on** / **Turn off** (the PS5-MQTT power switch, the Xbox remote, or `power`), **Home** on an Xbox that is on, **+15 min** of bonus time (`bonus_minutes`, 5 to 30) and **Suspend** / **Resume** on a Switch
+- **Controls**: **Turn on** / **Turn off** (the PS5-MQTT power switch, the Xbox remote, or `power`), **Home** on an Xbox that is on, **+15 min** of bonus time (`bonus_minutes`, 5 to 30; the first value of a list) and **Suspend** / **Resume** on a Switch
 - A tap on what is on screen opens the console's dialog
 - `animations: false` stops the TV's light and gleam (also when the system asks for reduced motion); `show_controls: false` leaves the card read-only
 
@@ -109,6 +109,11 @@ type: custom:console-card
 entity: sensor.kids_switch_used_screen_time
 bonus_minutes: 30
 
+# A Switch with several bonus choices in the screen time panel (+15 min on the card)
+type: custom:console-card
+entity: sensor.kids_switch_used_screen_time
+bonus_minutes: [15, 5, 10, 30]
+
 # On the banner alone
 type: custom:console-mini-card
 entity: media_player.playstation_5
@@ -130,7 +135,7 @@ entities:
 | `power` | string | found | A switch or remote turning the console on and off (PS5-MQTT), when the card does not find it |
 | `play_time` | string | | A sensor of today's play time (e.g. `history_stats`, in `h`, `min` or `s`; no unit: hours), over the count from the history |
 | `show_play_time` | boolean | `true` | Both: the *Played today* tile |
-| `bonus_minutes` | number | `15` | Both: the minutes added by a Switch's bonus button (5 to 30) |
+| `bonus_minutes` | number or list | `15` | Both: the minutes added by a Switch's bonus button (5 to 30); a list (YAML only) offers each value in the screen time panel, the first one on the button |
 | `illustration` | boolean | `true` | Both: the illustrated header (`false`: the classic header) |
 | `illustration_theme` | string | `auto` | Both: `auto` (follows the Home Assistant theme: night with a dark theme, day with a light theme), `day` or `night` |
 | `animations` | boolean | `true` | Both: the TV's light and the gleam on its screen |
@@ -159,6 +164,12 @@ The *Played today* tile: counted from the history on the PlayStation and on the 
 | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-online.png" alt="Switch, time left" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-time-up.png" alt="Switch, time's up" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-suspended.png" alt="Switch, suspended" width="400"> |
 | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-online-dark.png" alt="Switch, time left, dark" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-time-up-dark.png" alt="Switch, time's up, dark" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-suspended-dark.png" alt="Switch, suspended, dark" width="400"> |
 
+The screen time panel (the ring tapped, `bonus_minutes: [5, 10, 15, 30]`): today's limit, stepped by 15 minutes, and the bonus choices.
+
+| Light | Dark |
+|---|---|
+| <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-screen-time.png" alt="Switch, screen time panel" width="400"> | <img src="https://raw.githubusercontent.com/juju35/ha-console-card/main/screenshots/cc-switch-screen-time-dark.png" alt="Switch, screen time panel, dark" width="400"> |
+
 **Playing animation (PlayStation)**: the TV shows the game's cover, its blue light breathes on the wall and a gleam crosses the screen (still with `animations: false`, or when the system asks for reduced motion).
 
 | Light | Dark |
@@ -184,7 +195,7 @@ The *Played today* tile: counted from the history on the PlayStation and on the 
 - **Playing**: the media player playing or paused (on Xbox, a game rather than an app), or the PS5-MQTT activity *playing*; the session runs from the moment it started playing
 - **Play time today**: the time spent *playing* (the rule above) since midnight, from the recorder's history (`history/history_during_period`, asked again every 5 minutes or when the state changes, the minutes since then added while it plays); the media player and the PS5-MQTT activity of one console are counted once. None of the integrations reports a daily play time, except the Switch's screen time (on its ring); a `play_time` sensor replaces the count
 - **PS5-MQTT**: an MQTT switch or sensor named, or on a device named, like a PlayStation (*PS5*, *PS4*, *PlayStation*, *Sony*); beside a PlayStation Network console, the one of the same model
-- **Actions**: `turn_on` / `turn_off` on the power switch or the Xbox remote, `media_player.play_media` (`Home`) on an Xbox, `nintendo_parental_controls.add_bonus_time` and the suspend switch on a Switch; nothing else
+- **Actions**: `turn_on` / `turn_off` on the power switch or the Xbox remote, `media_player.play_media` (`Home`) on an Xbox, `nintendo_parental_controls.add_bonus_time`, `number.set_value` on today's limit and the suspend switch on a Switch; nothing else
 
 ## Development
 

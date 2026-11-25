@@ -128,6 +128,9 @@ export const CC_SVG = {
   home: '<path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 20h6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   status: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   friends: '<circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0M14 19a4 4 0 0 1 7 0"/>',
   storage: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 15h4M16 15h1"/>',
@@ -138,6 +141,23 @@ export const CC_SVG = {
   pause: '<path d="M8 5v14M16 5v14"/>',
   bonus: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M10 2h4"/>',
   hourglass: '<path d="M6 3h12M6 21h12"/><path d="M7 3c0 4 5 6 5 9s-5 5-5 9M17 3c0 4-5 6-5 9s5 5 5 9"/>',
+};
+// Today's limit in the screen time panel: stepped by 15 minutes, within the number's bounds (-1, no limit, apart).
+export const CC_LIMIT_STEP = 15;
+export const ccRange = (a) => {
+  const n = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  return { min: n(a?.min, -1), max: n(a?.max, 360) };
+};
+// The next limit a step `d` (±1) leads to from `v`, on the 15-minute grid, or null when there is none: from no limit,
+// stepping down starts from the highest limit.
+export const ccLimitStep = (v, d, r) => {
+  const lo = Math.max(0, r.min);
+  const hi = Math.floor(r.max / CC_LIMIT_STEP) * CC_LIMIT_STEP;
+  if (v == null) return null;
+  if (v < 0) return d < 0 && hi >= lo ? hi : null;
+  const next = d > 0 ? Math.floor(v / CC_LIMIT_STEP) * CC_LIMIT_STEP + CC_LIMIT_STEP : Math.ceil(v / CC_LIMIT_STEP) * CC_LIMIT_STEP - CC_LIMIT_STEP;
+  const out = Math.min(hi, Math.max(lo, next));
+  return out === v ? null : out;
 };
 // How long the history-counted play time is kept before it is asked again (ms): sooner when the state changes.
 export const CC_PLAYED_TTL = 300000;
