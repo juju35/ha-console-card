@@ -1,13 +1,14 @@
 // ── Editor ───────────────────────────────────────────────────────────────────
 import { ConsoleCard } from "./card.js";
 
-export const ccSchema = (booleans) => (lang) => [
+export const ccSchema = (booleans) => (lang, _hass, config) => [
   { name: "entity", selector: { entity: { filter: [{ integration: "playstation_network", domain: "media_player" }, { integration: "xbox", domain: "media_player" }, { integration: "nintendo_parental_controls" }, { integration: "mqtt", domain: ["switch", "sensor"] }] } } },
   { name: "title", selector: { text: {} } },
   { name: "navigation_path", selector: { navigation: {} } },
   { name: "power", selector: { entity: { domain: ["switch", "remote", "input_boolean"] } } },
   { name: "play_time", selector: { entity: { domain: ["sensor", "input_number"] } } },
-  { name: "bonus_minutes", selector: { number: { min: 5, max: 30, step: 5, mode: "box", unit_of_measurement: "min" } } },
+  // A list of bonus choices is YAML only: the form keeps one number.
+  ...(Array.isArray(config?.bonus_minutes) ? [] : [{ name: "bonus_minutes", selector: { number: { min: 5, max: 30, step: 5, mode: "box", unit_of_measurement: "min" } } }]),
   ...rcBooleans(...booleans),
   {
     name: "illustration_theme",

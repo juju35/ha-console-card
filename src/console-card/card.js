@@ -1,6 +1,6 @@
 // ── Card ─────────────────────────────────────────────────────────────────────
 import { CC_ACTIVE, CC_ICONS } from "./core.js";
-import { CC_PLAYED_TTL, CC_SVG, ccIcon, ccPlacePill, ccRoom } from "./banner.js";
+import { CC_LIMIT_STEP, CC_PLAYED_TTL, CC_SVG, ccIcon, ccLimitStep, ccPlacePill, ccRange, ccRoom } from "./banner.js";
 
 export class ConsoleCard extends RcCard {
   static tag = "console-card";
@@ -159,6 +159,8 @@ export class ConsoleCard extends RcCard {
       used: num(st("playing_time")),
       left: num(st("time_remaining")),
       max: num(st("max_screentime")),
+      maxId: ok(st("max_screentime")) ? e.max_screentime : null,
+      maxRange: ok(st("max_screentime")) ? ccRange(st("max_screentime").attributes) : null,
       extended: num(st("time_extended")),
       suspendId: ok(st("suspend")) ? e.suspend : null,
       suspended: st("suspend")?.state === "on",
@@ -293,12 +295,20 @@ export class ConsoleCard extends RcCard {
     super.disconnectedCallback?.();
     this._resize?.disconnect();
     this._fitWidth = undefined;
+    // Off the page: the panel closes, and a limit not sent yet is dropped.
+    clearTimeout(this._stTimer);
+    this._stVal = this._stId = null;
+    if (this._stOpen) {
+      this._stOpen = false;
+      document.removeEventListener("pointerdown", this._stAway, true);
+    }
     if (this._fitFrame) cancelAnimationFrame(this._fitFrame);
   }
 
   // What is on screen: the game and its cover (PlayStation, Xbox), or the screen time of the day (Switch).
   _now(m) {
     if (m.platform === "switch") {
+      if (this._stOpen && this._stCan(m)) return this._stPanel(m);
       if (m.used == null && m.left == null) return "";
       const unlimited = m.max != null && m.max < 0;
       const limit = !unlimited && m.max != null ? m.max : m.used != null && m.left != null ? m.used + m.left : null;
@@ -307,7 +317,7 @@ export class ConsoleCard extends RcCard {
       const ring = `<svg class="ring" viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="30" fill="none" stroke="var(--cc-track)" stroke-width="7"/>${limit ? `<circle cx="36" cy="36" r="30" fill="none" stroke="var(--c)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(L * share).toFixed(1)} 999" transform="rotate(-90 36 36)"/>` : ""}</svg>`;
       const big = m.state === "time_up" ? this._t("st_time_up") : unlimited ? this._t("no_limit") : m.left != null ? this._t("left", { t: this._dur(m.left) }) : "";
       const used = m.used != null ? `${this._dur(m.used)}${limit ? ` ${this._t("of_limit", { t: this._dur(limit) })}` : ""}` : "";
-      return `<button class="np sw" data-k="now" title="${rcEsc(this._t("screen_today"))}">${ring}<span class="nt"><span class="nl">${rcEsc(this._t("screen_today"))}</span><span class="nn">${rcEsc(used || "—")}</span><span class="ns">${rcEsc(big)}</span></span></button>`;
+      return `<button class="np sw" data-k="now" title="${rcEsc(this._t("screen_today"))}"${this._stCan(m) ? ' aria-expanded="false"' : ""}>${ring}<span class="nt"><span class="nl">${rcEsc(this._t("screen_today"))}</span><span class="nn">${rcEsc(used || "—")}</span><span class="ns">${rcEsc(big)}</span></span></button>`;
     }
     if (m.state !== "playing" && !m.app) {
       const line = m.state === "offline" || m.state === "standby" ? (m.lastAt ? this._t("last_seen", { d: this._ago(m.lastAt) }) : "") : this._t("home_screen");
@@ -374,7 +384,7 @@ export class ConsoleCard extends RcCard {
     const now = m.none ? "" : this._now(m);
     // Redrawn only when something shown changes (the session's minutes included): a reading that is the same on
     // screen must not rebuild the card (and restart the TV's light).
-    const parts = [m.none, m.raw, m.name, m.sub, status, now, tiles, this._trophies(m), m.state, m.model, m.cover, m.powerId, m.powerOn, m.mediaId, m.suspendId, m.suspended, dark, banner, night];
+    const parts = [m.none, m.raw, m.name, m.sub, status, now, tiles, this._trophies(m), m.state, m.model, m.cover, m.powerId, m.powerOn, m.mediaId, m.suspendId, m.suspended, dark, banner, night, this._stOpen, this._stVal, m.maxRange, this._bonusList()];
     if (!this._changed(parts)) return;
     const head = banner
       ? this._banner(m, m.sub ? `<div class="subt">${rcEsc(m.sub)}</div>` : "", night, status)
@@ -412,9 +422,86 @@ export class ConsoleCard extends RcCard {
     return `${tro}${out.length ? `<div class="ctl">${out.join("")}</div>` : ""}`;
   }
 
-  // The bonus button's minutes: 5 to 30, as the integration accepts.
+  // The bonus choices (`bonus_minutes`: a number or a list), each 5 to 30 as the integration accepts; the first one is
+  // the bonus button's.
+  _bonusList() {
+    const v = this._config.bonus_minutes;
+    const list = (Array.isArray(v) ? v : [v]).map((n) => Math.min(30, Math.max(5, Math.round(Number(n) || 15))));
+    return [...new Set(list)];
+  }
+
   _bonus() {
-    return Math.min(30, Math.max(5, Math.round(Number(this._config.bonus_minutes) || 15)));
+    return this._bonusList()[0];
+  }
+
+  // The screen time panel (the ring tapped): today's limit, when the Switch has its number, and the bonus choices
+  // when there are several. Nothing to set: the ring opens the details, as before.
+  _stCan(m) {
+    return m.platform === "switch" && !!(m.maxId || (m.device && this._bonusList().length > 1));
+  }
+
+  _stPanel(m) {
+    const ib = (k, icon, label) => `<button class="ib st-${k}" data-k="st-${k}" aria-label="${rcEsc(label)}" title="${rcEsc(label)}">${ccIcon(icon)}</button>`;
+    const head = `<div class="sth"><span class="nl">${rcEsc(this._t(m.maxId ? "limit_today" : "t_bonus"))}</span><span class="sta">${ib("info", CC_SVG.info, this._t("details"))}${ib("close", CC_SVG.close, this._t("close"))}</span></div>`;
+    let limit = "";
+    if (m.maxId) {
+      const v = this._stVal ?? m.max;
+      const r = m.maxRange;
+      const free = v != null && v < 0;
+      const step = (d) => `<button class="stb st-${d > 0 ? "plus" : "minus"}" data-k="st-${d > 0 ? "plus" : "minus"}" aria-label="${rcEsc(`${d > 0 ? "+" : "−"}${this._dur(CC_LIMIT_STEP)}`)}"${ccLimitStep(v, d, r) == null ? ' aria-disabled="true"' : ""}>${ccIcon(d > 0 ? CC_SVG.plus : CC_SVG.minus)}</button>`;
+      const none = !free && r.min < 0 ? `<button class="stn st-none" data-k="st-none">${rcEsc(this._t("no_limit"))}</button>` : "";
+      limit = `<div class="sts">${step(-1)}<span class="stv" aria-live="polite">${rcEsc(free ? this._t("no_limit") : v == null ? "—" : this._dur(v))}</span>${step(1)}</div>${none}`;
+    }
+    const list = m.device ? this._bonusList() : [];
+    const bonus = list.length && (m.maxId ? list.length > 1 || this._config.show_controls === false : true)
+      ? `${m.maxId ? `<span class="nl">${rcEsc(this._t("t_bonus"))}</span>` : ""}<div class="stc">${list.map((n) => `<button class="chip st-bonus" data-k="st-b${n}" data-n="${n}">${rcEsc(this._t("bonus", { n }))}</button>`).join("")}</div>`
+      : "";
+    return `<div class="np stp" role="group" aria-label="${rcEsc(this._t("screen_today"))}">${head}${limit}${bonus}</div>`;
+  }
+
+  // Opens or closes the panel; open, a press outside the card closes it.
+  _stToggle(open) {
+    if (!!this._stOpen === open) return;
+    this._stOpen = open;
+    if (open) {
+      this._stAway ??= (ev) => {
+        if (!ev.composedPath().includes(this)) this._stToggle(false);
+      };
+      document.addEventListener("pointerdown", this._stAway, true);
+    } else {
+      document.removeEventListener("pointerdown", this._stAway, true);
+      this._stFlush();
+    }
+    this._render();
+  }
+
+  // Today's limit, stepped: the taps add up and the value goes out once they stop.
+  _stStep(m, d) {
+    const v = ccLimitStep(this._stVal ?? m.max, d, m.maxRange);
+    if (v == null) return;
+    this._stSet(m, v, 700);
+  }
+
+  _stSet(m, v, wait) {
+    this._stVal = v;
+    this._stId = m.maxId;
+    clearTimeout(this._stTimer);
+    this._stTimer = setTimeout(() => this._stFlush(), wait);
+    this._render();
+  }
+
+  _stFlush() {
+    clearTimeout(this._stTimer);
+    if (this._stVal == null || !this._stId) return;
+    const value = this._stVal;
+    rcCall(this._hass, "number", "set_value", { entity_id: this._stId, value });
+    // Shown until the Switch reports it (or a few seconds, should it refuse).
+    clearTimeout(this._stHold);
+    this._stHold = setTimeout(() => {
+      this._stVal = null;
+      this._render();
+    }, 5000);
+    this._stId = null;
   }
 
   _bindAfter(root) {
@@ -426,7 +513,21 @@ export class ConsoleCard extends RcCard {
         ev.stopPropagation();
         fn(ev);
       });
-    on(".np", () => rcMoreInfo(this, m.mediaId || m.ids.activity || m.ids.time_remaining || m.id));
+    const info = () => rcMoreInfo(this, m.mediaId || m.ids.activity || m.ids.time_remaining || m.id);
+    on(".np", () => (this._stCan(m) ? this._stToggle(true) : info()));
+    on(".st-info", () => {
+      this._stToggle(false);
+      info();
+    });
+    on(".st-close", () => this._stToggle(false));
+    on(".st-minus", () => this._stStep(m, -1));
+    on(".st-plus", () => this._stStep(m, 1));
+    on(".st-none", () => this._stSet(m, -1, 0));
+    for (const el of root.querySelectorAll(".st-bonus"))
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        rcCall(h, "nintendo_parental_controls", "add_bonus_time", { device_id: m.device, bonus_time: Number(el.dataset.n) });
+      });
     on(".act-power", () => {
       const domain = m.powerId.split(".")[0];
       const off = m.powerOn || CC_ACTIVE.includes(m.state);
@@ -470,6 +571,27 @@ export class ConsoleCard extends RcCard {
     .pbar span { display: block; height: 100%; border-radius: 2px; background: var(--c); }
     .pv { flex: none; font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--c) 50%, var(--primary-text-color, #212121)); }
     .np.sw { gap: 14px; }
+    /* The screen time panel: today's limit, stepped, and the bonus choices. */
+    .np.stp { cursor: default; flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px 12px; }
+    .sth { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+    .sta { display: flex; gap: 2px; margin-right: -4px; }
+    .ib, .stb, .stn, .chip { all: unset; box-sizing: border-box; cursor: pointer; }
+    .ib { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--secondary-text-color); }
+    .ib:hover { background: var(--cc-track); }
+    .ib svg { width: 16px; height: 16px; }
+    .sts { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .stb { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; color: color-mix(in srgb, var(--c) 70%, var(--primary-text-color, #212121));
+           background: color-mix(in srgb, var(--c) 14%, transparent); }
+    .stb:hover { background: color-mix(in srgb, var(--c) 24%, transparent); }
+    .stb[aria-disabled="true"] { opacity: .35; cursor: default; background: color-mix(in srgb, var(--c) 14%, transparent); }
+    .stb svg { width: 18px; height: 18px; }
+    .stv { font-size: 22px; font-weight: 600; color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+    .stn { align-self: center; margin-top: -4px; font-size: 12px; color: var(--secondary-text-color); text-decoration: underline; text-underline-offset: 2px; }
+    .stc { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+            color: color-mix(in srgb, var(--c) 70%, var(--primary-text-color, #212121)); background: color-mix(in srgb, var(--c) 14%, transparent); }
+    .chip:hover { background: color-mix(in srgb, var(--c) 24%, transparent); }
+    .ib:focus-visible, .stb:focus-visible, .stn:focus-visible, .chip:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
     .ring { flex: none; width: 72px; height: 72px; }
     .sw .nn { font-size: 20px; }
     .grid { margin-top: 10px; gap: 8px; }

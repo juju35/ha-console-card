@@ -71,7 +71,7 @@ export const home = ({ ps = "playing", xbox = "playing", left = 40, used = 80, m
   sw("sensor", "used_screen_time", "playing_time", String(used), { unit_of_measurement: "min" });
   sw("sensor", "time_remaining", "time_remaining", String(left), { unit_of_measurement: "min" });
   sw("sensor", "time_extended", "time_extended", String(extended), { unit_of_measurement: "min" });
-  sw("number", "max_screentime_today", "today_max_screentime", String(max), { unit_of_measurement: "min" });
+  sw("number", "max_screentime_today", "today_max_screentime", String(max), { unit_of_measurement: "min", min: -1, max: 360, step: 1 });
   sw("switch", "suspend_software", "suspend_software", suspend);
   sw("select", "restriction_mode", "timer_mode", "Daily");
   sw("time", "bedtime_alarm", "bedtime_alarm", "21:00:00");
@@ -116,6 +116,8 @@ const SCENES = {
   "switch-online": ["sensor.kids_switch_used_screen_time", {}],
   "switch-time-up": ["sensor.kids_switch_used_screen_time", { left: 0, used: 120 }],
   "switch-suspended": ["sensor.kids_switch_used_screen_time", { suspend: "on", left: 0, used: 120 }],
+  // The screen time panel (the ring tapped): today's limit and several bonus choices.
+  "switch-screen-time": ["sensor.kids_switch_used_screen_time", {}, { bonus_minutes: [5, 10, 15, 30] }],
   // A PS5 seen by PS5-MQTT alone (no PlayStation Network account).
   "ps5-mqtt": ["switch.ps5_power", { ps: "playing", psn: false }],
 };
@@ -123,5 +125,5 @@ const SCENES = {
 export const setup = (s) => {
   const [entity, opts, config] = SCENES[s.scene];
   const hass = { ...home(opts), themes: { darkMode: s.theme === "dark" } };
-  return { hass, config: { entity, ...config, ...s.config }, open: s.open };
+  return { hass, config: { entity, ...config, ...s.config }, open: s.open ?? (s.scene === "switch-screen-time" ? ".np" : null) };
 };

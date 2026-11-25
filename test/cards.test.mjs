@@ -173,6 +173,54 @@ test("Switch: screen time ring, time left; time's up; suspended; bonus and suspe
   assert.equal(free._bonus(), 30);
 });
 
+test("Switch: the ring opens the screen time panel — today's limit stepped by 15 min, no limit, bonus choices", () => {
+  const h = makeHass();
+  const card = make("console-card", { ...NS, bonus_minutes: [10, 5, 10, 60] }, h);
+  assert.deepEqual(json(card._bonusList()), [10, 5, 30]);
+  assert.equal(card._bonus(), 10);
+  assert.match(card.shadowRoot.innerHTML, /aria-expanded="false"/);
+  click(card, ".np");
+  const html = card.shadowRoot.innerHTML;
+  assert.match(html, /class="np stp"/);
+  assert.match(html, /Today(&#39;|&#x27;|')s limit/);
+  assert.match(html, /class="stv"[^>]*>2 h</);
+  assert.match(html, /data-n="5">\+5 min</);
+  assert.match(html, /data-n="30">\+30 min</);
+  assert.match(html, /class="stn st-none"/);
+  // The taps add up; the value goes out once they stop (or the panel closes).
+  click(card, ".st-plus");
+  click(card, ".st-plus");
+  assert.match(card.shadowRoot.innerHTML, /class="stv"[^>]*>2 h 30 min</);
+  const before = h.calls.length;
+  click(card, ".st-close");
+  assert.equal(card._stOpen, false);
+  assert.deepEqual(json(h.calls.at(-1)), ["number", "set_value", { entity_id: "number.kids_switch_max_screentime_today", value: 150 }]);
+  assert.equal(h.calls.length, before + 1);
+  // The 15-minute grid and the bounds: from no limit, down starts at the highest limit; nothing past the bounds.
+  const step = (max, sel) => {
+    const c = make("console-card", NS, makeHass({ max }));
+    click(c, ".np");
+    if (sel) click(c, sel);
+    return c.shadowRoot.innerHTML;
+  };
+  assert.match(step(100, ".st-plus"), /class="stv"[^>]*>1 h 45 min</);
+  assert.match(step(100, ".st-minus"), /class="stv"[^>]*>1 h 30 min</);
+  assert.match(step(-1, ".st-minus"), /class="stv"[^>]*>6 h</);
+  assert.match(step(-1), /st-plus"[^>]*aria-disabled="true"/);
+  assert.doesNotMatch(step(-1), /st-none/);
+  assert.match(step(360), /st-plus"[^>]*aria-disabled="true"/);
+  // One bonus value and no limit number: the ring opens the details, as before.
+  const plain = make("console-card", NS, makeHass());
+  assert.equal(plain._stCan({ ...plain._items, maxId: null }), false);
+  assert.equal(plain._stCan(plain._items), true);
+  // A list of bonus choices is YAML only: the editor drops the number field.
+  const ed = new (cc.customElements.get("console-card-editor"))();
+  ed.appendChild = () => {};
+  ed.setConfig({ type: "custom:console-card", ...NS, bonus_minutes: [5, 10] });
+  ed.hass = makeHass();
+  assert.ok(!ed._form.schema.some((f) => f.name === "bonus_minutes"));
+});
+
 test("mini card: the state as the pill, the game and the session as chips; the zoom opens the full card", () => {
   const card = make("console-mini-card", PS);
   const html = card.shadowRoot.innerHTML;
